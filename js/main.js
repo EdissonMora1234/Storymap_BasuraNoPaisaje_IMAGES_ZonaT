@@ -1,10 +1,11 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Inicializar el mapa centrado en las coordenadas de la primera diapositiva
-    var map = L.map('map').setView([4.667110, -74.053580], 18);
+    var map = L.map('map').setView([4.667110, -74.053580], 19);
 
-    // Agregar capa base de OpenStreetMap
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 21
     }).addTo(map);
 
     // Configuración de las capas WMS
@@ -12,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
         {
             url: 'https://geoserver.scrd.gov.co/geoserver/Investigacion_Cultured_Maps/wms',
             layerName: 'Investigacion_Cultured_Maps:Localidad_Storymap_RolMujer',
-            displayName: 'Localidad Rol Mujer'
+            displayName: 'Localidad'
         },
         {
             url: 'https://geoserver.scrd.gov.co/geoserver/Investigacion_Cultured_Maps/wms',
@@ -41,8 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
             layers: wmsLayer.layerName,
             format: 'image/png',
             transparent: true,
-            maxZoom: 19, // Configurar el nivel de zoom máximo
-            minZoom: 0
+            maxZoom: 21
         });
 
         // Añadir la capa al objeto de overlays con su nombre visible
@@ -141,5 +141,46 @@ document.addEventListener('DOMContentLoaded', function() {
         var zoom = parseInt(indexSlide.getAttribute('data-zoom'));
         changeMapView(lat, lng, zoom);
         indexSlide.scrollIntoView({behavior: 'smooth'});
+    });
+
+    // función para despliegue de pop ups
+    map.on('click', function (e) {
+        // Coordenadas del clic
+        var latlng = e.latlng;
+        var bbox = map.getBounds().toBBoxString();
+        var size = map.getSize();
+    
+        // Recorremos las capas activas del mapa
+        Object.keys(overlays).forEach(function (displayName) {
+            var layer = overlays[displayName];
+    
+            if (map.hasLayer(layer)) {
+                var wmsParams = layer.wmsParams;
+    
+                var url = `${layer._url}?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=${wmsParams.layers}` +
+                          `&QUERY_LAYERS=${wmsParams.layers}&BBOX=${bbox}&FEATURE_COUNT=5&HEIGHT=${size.y}&WIDTH=${size.x}` +
+                          `&INFO_FORMAT=application/json&SRS=EPSG:4326&X=${Math.floor(map.layerPointToContainerPoint(e.layerPoint).x)}` +
+                          `&Y=${Math.floor(map.layerPointToContainerPoint(e.layerPoint).y)}`;
+    
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.features && data.features.length > 0) {
+                            var props = data.features[0].properties;
+                            var content = `<b>${displayName}</b><br/>`;
+                            for (var key in props) {
+                                content += `<b>${key}:</b> ${props[key]}<br/>`;
+                            }
+                            L.popup()
+                                .setLatLng(latlng)
+                                .setContent(content)
+                                .openOn(map);
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error en GetFeatureInfo:', err);
+                    });
+            }
+        });
     });
 });
